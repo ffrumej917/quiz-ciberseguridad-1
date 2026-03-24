@@ -294,7 +294,25 @@
     .question-text { font-size: 17px; }
     .results-card .score-display { font-size: 44px; }
   }
+
+  .code-section { text-align: center; margin-bottom: 24px; }
+  .code-section label { display: block; font-size: 14px; color: var(--text-dim); margin-bottom: 8px; }
+  .code-section input {
+    font-family: 'Space Mono', monospace; font-size: 22px; padding: 14px 18px;
+    width: 100%; max-width: 280px; background: var(--option-bg);
+    border: 2px solid var(--border); border-radius: 10px; color: var(--accent);
+    outline: none; transition: border-color 0.2s; text-align: center;
+    letter-spacing: 6px; text-transform: uppercase;
+  }
+  .code-section input:focus { border-color: var(--accent); }
+  .code-section input::placeholder { letter-spacing: 2px; font-size: 14px; }
+  .code-error { color: var(--wrong); font-size: 13px; margin-top: 8px; display: none; }
+  .code-error.show { display: block; }
+  .code-ok { color: var(--correct); font-size: 14px; margin-top: 8px; display: none; }
+  .code-ok.show { display: block; animation: fadeUp 0.3s ease-out; }
 </style>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 </head>
 <body>
 <div class="container">
@@ -304,7 +322,15 @@
       <h1>Quiz 1 · ¿Qué pasa con tus datos?</h1>
       <p>15 preguntas · Plataformas, cookies, huella digital, privacidad y cifrado · CyR 6.2 — 2º ESO</p>
     </div>
-    <div class="student-name-section">
+    <div id="codeSection" class="code-section">
+      <label for="accessCode">Introduce el codigo de acceso del profesor</label>
+      <input type="text" id="accessCode" placeholder="CODIGO" autocomplete="off" maxlength="12">
+      <div id="codeError" class="code-error">Codigo incorrecto</div>
+      <div id="codeOk" class="code-ok">Codigo correcto</div>
+      <br>
+      <button class="start-btn" onclick="validateCode()">Validar codigo</button>
+    </div>
+    <div class="student-name-section hidden" id="nameSection">
       <label for="studentName">Escribe tu nombre para empezar</label>
       <input type="text" id="studentName" placeholder="Tu nombre y apellidos" autocomplete="off">
       <br>
@@ -345,33 +371,66 @@
 </div>
 <script>
 const questions = [{"q": "Cuando subes una foto a internet con el GPS activado, ¿qué información adicional guarda el servidor?", "opts": ["Solo el nombre del archivo", "La ubicación exacta donde se tomó la foto", "El color promedio de la imagen", "El nombre de tu operadora de telefonía"], "correct": 1, "explain": "Los metadatos EXIF de una foto incluyen coordenadas GPS si el dispositivo tenía el GPS activado al hacer la foto."}, {"q": "¿Qué son los metadatos EXIF de una foto?", "opts": ["Un filtro de edición de imágenes", "El tamaño en píxeles de la imagen", "Datos ocultos dentro del archivo con información como modelo de cámara, fecha/hora y coordenadas GPS", "El formato de compresión usado"], "correct": 2, "explain": "Los metadatos EXIF viajan con el archivo aunque no sean visibles al verlo, e incluyen modelo de cámara, fecha/hora exacta y coordenadas GPS."}, {"q": "¿Qué tipo de plataforma recoge tu agenda de contactos al registrarte?", "opts": ["Plataformas de streaming como Spotify", "Aplicaciones de mensajería como WhatsApp o Telegram", "Foros como Reddit", "Servicios de almacenamiento en nube como Google Drive"], "correct": 1, "explain": "Las apps de mensajería como WhatsApp solicitan acceso a tu número de teléfono y agenda de contactos para funcionar."}, {"q": "¿Qué son los datos automáticos que cede una app sin que el usuario lo decida?", "opts": ["Solo el nombre de usuario elegido", "Datos como la dirección IP, sistema operativo y modelo del dispositivo", "El historial de conversaciones privadas", "La contraseña cifrada del usuario"], "correct": 1, "explain": "Los datos automáticos son aquellos que la app recoge sin pedirlos: IP, sistema operativo, modelo de dispositivo, batería, etc."}, {"q": "¿Qué tipo de cookie sigue tu actividad en múltiples páginas web distintas para crear un perfil publicitario?", "opts": ["Cookie de sesión", "Cookie de preferencias", "Cookie de rastreo de terceros", "Cookie de autenticación"], "correct": 2, "explain": "Las cookies de rastreo de terceros (como Google Ads o Meta Pixel) siguen al usuario por distintas webs para construir su perfil publicitario."}, {"q": "¿Qué diferencia hay entre la huella digital activa y la pasiva?", "opts": ["La activa la generan empresas; la pasiva la genera el usuario", "La activa es lo que publicas tú conscientemente; la pasiva son datos recogidos sin que actúes", "La activa se borra sola; la pasiva es permanente", "No hay diferencia real entre ambas"], "correct": 1, "explain": "Huella activa = lo que publicas tú (fotos, comentarios, likes). Huella pasiva = datos recogidos automáticamente (IP, cookies, clics)."}, {"q": "Si borras una foto de tus redes sociales, ¿desaparece completamente de internet?", "opts": ["Sí, se elimina de todos los servidores al instante", "No, puede seguir existiendo en cachés, Wayback Machine o en capturas de otros usuarios", "Solo desaparece si el servidor lo confirma", "Depende del tamaño del archivo"], "correct": 1, "explain": "Aunque borres contenido, puede seguir indexado en Google Cache o Wayback Machine, o haber sido guardado por otros usuarios."}, {"q": "¿Qué ajuste es importante desactivar en las apps de cámara para proteger tu ubicación?", "opts": ["El modo nocturno", "La localización GPS en las fotos", "El formato de archivo RAW", "El autoenfoque automático"], "correct": 1, "explain": "Desactivar el GPS en fotos evita que los metadatos EXIF incluyan tus coordenadas geográficas al compartir imágenes."}, {"q": "Si tienes el perfil de Instagram público, ¿qué ocurre con tu contenido?", "opts": ["Solo tus seguidores pueden verlo", "Solo aparece en la app de Instagram", "Tu contenido puede indexarse en buscadores como Google", "Desaparece después de 24 horas"], "correct": 2, "explain": "Un perfil público hace que tu contenido sea accesible a cualquiera e indexable por motores de búsqueda."}, {"q": "¿Qué significa que una web usa el protocolo HTTPS en lugar de HTTP?", "opts": ["Que la web está registrada oficialmente en España", "Que los datos viajan cifrados con TLS/SSL y no en texto plano", "Que la web no puede ser hackeada nunca", "Que el servidor está ubicado en Europa"], "correct": 1, "explain": "HTTPS usa cifrado TLS/SSL que encripta los datos en tránsito, a diferencia de HTTP donde viajan en texto plano y cualquiera en la red puede leerlos."}, {"q": "¿El candado en el navegador garantiza que una web es legítima y segura?", "opts": ["Sí, certifica que la web es de confianza", "No, solo indica que la conexión está cifrada; webs de phishing también usan HTTPS", "Sí, pero solo en ordenadores", "Solo si el candado es de color verde"], "correct": 1, "explain": "El candado indica que la conexión está cifrada (HTTPS), pero NO garantiza la legitimidad de la web. Los atacantes también pueden usar HTTPS."}, {"q": "¿Qué riesgo existe al navegar por webs HTTP en una red WiFi pública sin contraseña?", "opts": ["Ninguno si no introduces contraseñas", "Alguien en la misma red puede interceptar tu tráfico mediante un ataque man-in-the-middle", "Solo hay riesgo en redes de aeropuertos", "El riesgo es mínimo si el móvil tiene antivirus"], "correct": 1, "explain": "En redes WiFi públicas, un atacante puede interceptar el tráfico HTTP no cifrado mediante un ataque man-in-the-middle y leer tus datos."}, {"q": "¿Por qué el RGPD obliga a las webs a pedirte permiso para las cookies?", "opts": ["Para mejorar el rendimiento del servidor", "Porque las cookies de rastreo ceden datos personales a terceros sin consentimiento si no se avisa", "Para cumplir con normas de diseño web europeo", "Solo afecta a webs de compras online"], "correct": 1, "explain": "El RGPD exige consentimiento explícito antes de activar cookies no esenciales, especialmente las de rastreo que comparten datos con terceros."}, {"q": "¿Qué diferencia hay entre el cifrado en tránsito y el cifrado en reposo?", "opts": ["Son dos nombres del mismo proceso", "El cifrado en tránsito protege los datos mientras viajan; el cifrado en reposo protege los datos almacenados en el servidor", "El cifrado en reposo solo funciona en móviles", "El cifrado en tránsito es más débil que el cifrado en reposo"], "correct": 1, "explain": "Cifrado en tránsito = protege datos moviéndose por la red (HTTPS). Cifrado en reposo = protege datos guardados en el servidor."}, {"q": "Una app de linterna pide acceso a tu cámara y contactos. ¿Qué tipo de permisos son estos?", "opts": ["Datos voluntarios que tú decides dar", "Permisos innecesarios que pueden usarse para recoger datos sin tu conocimiento real", "Datos técnicos obligatorios del sistema", "Información necesaria para funcionar correctamente"], "correct": 1, "explain": "Una linterna solo necesita el flash/pantalla. Pedir cámara y contactos son permisos innecesarios que pueden usarse para espiar o recoger datos."}];
-let currentQ = 0, score = 0, answered = false, studentName = '';
+
+const QUIZ_ID = 'quiz-ciberseguridad-1';
+const FIREBASE_DB_URL = 'https://quizzes-cyr-default-rtdb.europe-west1.firebasedatabase.app';
+firebase.initializeApp({ databaseURL: FIREBASE_DB_URL });
+const db = firebase.database();
+let currentQ = 0, score = 0, answered = false, studentName = '', codeValidated = false;
+
+function validateCode() {
+  const code = document.getElementById('accessCode').value.trim().toUpperCase();
+  if (!code) { document.getElementById('accessCode').style.borderColor = 'var(--wrong)'; return; }
+  db.ref('quizzes/' + QUIZ_ID).once('value').then(snap => {
+    const data = snap.val();
+    if (!data) { showCodeErr('Quiz no configurado. Contacta al profesor.'); return; }
+    if (data.active === false) { showCodeErr('Este quiz esta cerrado por el profesor.'); return; }
+    if (data.code && data.code.toUpperCase() === code) {
+      document.getElementById('codeError').classList.remove('show');
+      document.getElementById('codeOk').classList.add('show');
+      codeValidated = true;
+      setTimeout(() => {
+        document.getElementById('codeSection').classList.add('hidden');
+        document.getElementById('nameSection').classList.remove('hidden');
+      }, 600);
+    } else { showCodeErr('Codigo incorrecto. Pregunta a tu profesor.'); }
+  }).catch(() => showCodeErr('Error de conexion. Intenta de nuevo.'));
+}
+function showCodeErr(msg) {
+  document.getElementById('codeError').textContent = msg;
+  document.getElementById('codeError').classList.add('show');
+  document.getElementById('codeOk').classList.remove('show');
+  document.getElementById('accessCode').style.borderColor = 'var(--wrong)';
+}
+
 function startQuiz() {
+  if (!codeValidated) return;
   studentName = document.getElementById('studentName').value.trim();
   if (!studentName) {
     document.getElementById('studentName').style.borderColor = 'var(--wrong)';
-    document.getElementById('studentName').setAttribute('placeholder', '⚠️ Escribe tu nombre');
+    document.getElementById('studentName').setAttribute('placeholder', 'Escribe tu nombre');
     return;
   }
   document.getElementById('intro').classList.add('hidden');
   document.getElementById('quiz').classList.remove('hidden');
   showQuestion();
 }
+
 function showQuestion() {
   answered = false;
   const q = questions[currentQ];
-  document.getElementById('qNumber').textContent = `PREGUNTA ${currentQ + 1}`;
+  document.getElementById('qNumber').textContent = 'PREGUNTA ' + (currentQ + 1);
   document.getElementById('qText').textContent = q.q;
-  document.getElementById('progressText').textContent = `${currentQ + 1} / ${questions.length}`;
-  document.getElementById('scoreText').textContent = `Aciertos: ${score}`;
-  document.getElementById('progressFill').style.width = `${(currentQ / questions.length) * 100}%`;
+  document.getElementById('progressText').textContent = (currentQ + 1) + ' / ' + questions.length;
+  document.getElementById('scoreText').textContent = 'Aciertos: ' + score;
+  document.getElementById('progressFill').style.width = ((currentQ / questions.length) * 100) + '%';
   const container = document.getElementById('optionsContainer');
   container.innerHTML = '';
-  const letters = ['A', 'B', 'C', 'D'];
+  const letters = ['A','B','C','D'];
   q.opts.forEach((opt, i) => {
     const div = document.createElement('div');
     div.className = 'option';
-    div.innerHTML = `<div class="letter"><span>${letters[i]}</span></div><div class="option-text">${opt}</div>`;
+    div.innerHTML = '<div class="letter"><span>'+letters[i]+'</span></div><div class="option-text">'+opt+'</div>';
     div.onclick = () => selectAnswer(i);
     container.appendChild(div);
   });
@@ -380,6 +439,7 @@ function showQuestion() {
   const card = document.getElementById('questionCard');
   card.style.animation = 'none'; card.offsetHeight; card.style.animation = '';
 }
+
 function selectAnswer(idx) {
   if (answered) return;
   answered = true;
@@ -392,43 +452,50 @@ function selectAnswer(idx) {
     else opt.classList.add('dimmed');
   });
   const fb = document.getElementById('feedback');
-  fb.classList.remove('hidden', 'correct-fb', 'wrong-fb');
-  if (isCorrect) { fb.classList.add('correct-fb'); fb.innerHTML = `<strong>✅ ¡Correcto!</strong> ${q.explain}`; }
-  else { fb.classList.add('wrong-fb'); fb.innerHTML = `<strong>❌ Incorrecto.</strong> ${q.explain}`; }
-  document.getElementById('scoreText').textContent = `Aciertos: ${score}`;
+  fb.classList.remove('hidden','correct-fb','wrong-fb');
+  if (isCorrect) { fb.classList.add('correct-fb'); fb.innerHTML = '<strong>\u2705 \u00a1Correcto!</strong> '+q.explain; }
+  else { fb.classList.add('wrong-fb'); fb.innerHTML = '<strong>\u274c Incorrecto.</strong> '+q.explain; }
+  document.getElementById('scoreText').textContent = 'Aciertos: ' + score;
   const nextBtn = document.getElementById('nextBtn');
   nextBtn.classList.remove('hidden');
-  nextBtn.textContent = currentQ === questions.length - 1 ? 'Ver resultados 🏆' : 'Siguiente pregunta →';
+  nextBtn.textContent = currentQ === questions.length - 1 ? 'Ver resultados \ud83c\udfc6' : 'Siguiente pregunta \u2192';
 }
+
 function nextQuestion() {
   currentQ++;
   if (currentQ >= questions.length) showResults();
   else showQuestion();
 }
+
 function showResults() {
   document.getElementById('quiz').classList.add('hidden');
   document.getElementById('results').classList.remove('hidden');
   const pct = Math.round((score / questions.length) * 100);
   document.getElementById('resultName').textContent = studentName;
-  document.getElementById('resultScore').textContent = `${score} / ${questions.length}`;
+  document.getElementById('resultScore').textContent = score + ' / ' + questions.length;
   let emoji, title, msg, color;
-  if (pct >= 90) { emoji='🏆'; title='¡Experto!'; msg='¡Increíble! Dominas el tema como un profesional.'; color='var(--correct)'; }
-  else if (pct >= 70) { emoji='🛡️'; title='¡Muy bien!'; msg='Gran resultado. Repasa los fallos y serás imparable.'; color='var(--accent)'; }
-  else if (pct >= 50) { emoji='🔑'; title='Vas por buen camino'; msg='Tienes base pero necesitas repasar algunos conceptos.'; color='#ffab40'; }
-  else { emoji='📚'; title='Necesitas repasar'; msg='Revisa el material y vuelve a intentarlo. ¡Tú puedes!'; color='var(--wrong)'; }
+  if (pct >= 90) { emoji='\ud83c\udfc6'; title='\u00a1Experto!'; msg='\u00a1Incre\u00edble! Dominas el tema como un profesional.'; color='var(--correct)'; }
+  else if (pct >= 70) { emoji='\ud83d\udee1\ufe0f'; title='\u00a1Muy bien!'; msg='Gran resultado. Repasa los fallos y ser\u00e1s imparable.'; color='var(--accent)'; }
+  else if (pct >= 50) { emoji='\ud83d\udd11'; title='Vas por buen camino'; msg='Tienes base pero necesitas repasar algunos conceptos.'; color='#ffab40'; }
+  else { emoji='\ud83d\udcda'; title='Necesitas repasar'; msg='Revisa el material y vuelve a intentarlo. \u00a1T\u00fa puedes!'; color='var(--wrong)'; }
   document.getElementById('resultEmoji').textContent = emoji;
   document.getElementById('resultTitle').textContent = title;
   document.getElementById('resultMessage').textContent = msg;
   const fill = document.getElementById('resultsFill');
   fill.style.background = color;
-  setTimeout(() => { fill.style.width = `${pct}%`; }, 100);
+  setTimeout(() => { fill.style.width = pct + '%'; }, 100);
+  db.ref('results/' + QUIZ_ID).push({
+    name: studentName, score: score, total: questions.length, pct: pct, timestamp: Date.now()
+  });
 }
+
 function retryQuiz() {
   currentQ = 0; score = 0; answered = false;
   document.getElementById('results').classList.add('hidden');
   document.getElementById('quiz').classList.remove('hidden');
   showQuestion();
 }
+document.getElementById('accessCode').addEventListener('keydown', function(e) { if (e.key === 'Enter') validateCode(); });
 </script>
 </body>
 </html>
