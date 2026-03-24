@@ -311,8 +311,6 @@
   .code-ok { color: var(--correct); font-size: 14px; margin-top: 8px; display: none; }
   .code-ok.show { display: block; animation: fadeUp 0.3s ease-out; }
 </style>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 </head>
 <body>
 <div class="container">
@@ -374,27 +372,26 @@ const questions = [{"q": "Cuando subes una foto a internet con el GPS activado, 
 
 const QUIZ_ID = new URLSearchParams(window.location.search.toLowerCase()).get('id') || 'quiz-ciberseguridad-1';
 const FIREBASE_DB_URL = 'https://quizzes-cyr-default-rtdb.europe-west1.firebasedatabase.app';
-firebase.initializeApp({ databaseURL: FIREBASE_DB_URL });
-const db = firebase.database();
 let currentQ = 0, score = 0, answered = false, studentName = '', codeValidated = false;
 
 function validateCode() {
   const code = document.getElementById('accessCode').value.trim().toUpperCase();
   if (!code) { document.getElementById('accessCode').style.borderColor = 'var(--wrong)'; return; }
-  db.ref('quizzes/' + QUIZ_ID).once('value').then(snap => {
-    const data = snap.val();
-    if (!data) { showCodeErr('Quiz no configurado. Contacta al profesor.'); return; }
-    if (data.active === false) { showCodeErr('Este quiz esta cerrado por el profesor.'); return; }
-    if (data.code && data.code.toUpperCase() === code) {
-      document.getElementById('codeError').classList.remove('show');
-      document.getElementById('codeOk').classList.add('show');
-      codeValidated = true;
-      setTimeout(() => {
-        document.getElementById('codeSection').classList.add('hidden');
-        document.getElementById('nameSection').classList.remove('hidden');
-      }, 600);
-    } else { showCodeErr('Codigo incorrecto. Pregunta a tu profesor.'); }
-  }).catch(() => showCodeErr('Error de conexion. Intenta de nuevo.'));
+  fetch(FIREBASE_DB_URL + '/quizzes/' + QUIZ_ID + '.json')
+    .then(r => r.json())
+    .then(data => {
+      if (!data) { showCodeErr('Quiz no configurado. Contacta al profesor.'); return; }
+      if (data.active === false) { showCodeErr('Este quiz esta cerrado por el profesor.'); return; }
+      if (data.code && data.code.toUpperCase() === code) {
+        document.getElementById('codeError').classList.remove('show');
+        document.getElementById('codeOk').classList.add('show');
+        codeValidated = true;
+        setTimeout(() => {
+          document.getElementById('codeSection').classList.add('hidden');
+          document.getElementById('nameSection').classList.remove('hidden');
+        }, 600);
+      } else { showCodeErr('Codigo incorrecto. Pregunta a tu profesor.'); }
+    }).catch(() => showCodeErr('Error de conexion. Intenta de nuevo.'));
 }
 function showCodeErr(msg) {
   document.getElementById('codeError').textContent = msg;
@@ -484,8 +481,10 @@ function showResults() {
   const fill = document.getElementById('resultsFill');
   fill.style.background = color;
   setTimeout(() => { fill.style.width = pct + '%'; }, 100);
-  db.ref('results/' + QUIZ_ID).push({
-    name: studentName, score: score, total: questions.length, pct: pct, timestamp: Date.now()
+  fetch(FIREBASE_DB_URL + '/results/' + QUIZ_ID + '.json', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: studentName, score: score, total: questions.length, pct: pct, timestamp: Date.now() })
   });
 }
 
